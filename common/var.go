@@ -64,6 +64,7 @@ func initOptions() (options rpcxclient.Options) {
 	options.ServerName = "{service_name}"
 	options.Addr = strings.Split(global.Config.Registry.Addr, " ")
 	options.Group = global.Config.Registry.Group
+	options.Timeout = time.Duration(global.Config.Rpc.WithTimeout) * time.Second
 
 	return options
 }
