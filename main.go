@@ -35,7 +35,7 @@ func main() {
 	serviceName := flag.String("service_name", "", "the service name, required when generate rpc file")
 	dns := flag.String("db_dns", "", "the database dns, required when generate gorm model file or xorm model file")
 	tablePrefix := flag.String("db_tp", "", "the database's table prefix, required when generate gorm model file or xorm model file")
-	outPut := flag.String("db_out", "./dao/db/", "the table model file output dir")
+	outPut := flag.String("db_out", "./app/dao/db/", "the table model file output dir")
 
 	flag.Usage = func() {
 		fmt.Print(help)

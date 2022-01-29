@@ -46,7 +46,7 @@ var FieldTypeMap = map[string]string{
 	"tinyblob":   "string",
 	"tinytext":   "string",
 	"blob":       "string",
-	"test":       "string",
+	"text":       "string",
 	"mediumblob": "string",
 	"mediumtext": "string",
 	"longblob":   "string",
