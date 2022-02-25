@@ -33,8 +33,9 @@ type (
 )
 
 var (
-	pkgList      = make(map[PkgName]PkgInfo)
-	pkgNameCount = make(map[PkgName]int)
+	pkgList          = make(map[PkgName]PkgInfo)
+	pkgNameCount     = make(map[PkgName]int)
+	validateFuncList = make(map[string]byte)
 )
 
 func NewService(servicePath string) *Service {
@@ -48,6 +49,8 @@ func (g *Service) GenService() {
 	if err != nil {
 		log.Fatalf("read dir %v failed: err=%v \n", g.ServicePath, err)
 	}
+
+	g.generateValidateFuncList()
 
 	serviceStruct := "type Service struct {"
 	newService := "return &Service{"
@@ -102,8 +105,37 @@ func (g *Service) getModName() string {
 	return strings.Split(slice[0], " ")[1]
 }
 
+func (g *Service) generateValidateFuncList() {
+	dirPath := "./app/validation"
+	rd, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		log.Fatalf("read dir %v failed: err=%v \n", dirPath, err)
+	}
+
+	for _, fileInfo := range rd {
+		filePath := path.Join(dirPath, fileInfo.Name())
+		content, err := common.GetFileContentToSlice(filePath)
+		if err != nil {
+			log.Fatalf("get file content to slice failed: filePath=%v err=%v", filePath, err)
+		}
+		for _, line := range content {
+			if !strings.HasPrefix(line, "func ") {
+				continue
+			}
+			sli := strings.Split(line, "(")
+			validateFuncList[strings.Split(sli[0], " ")[1]] = 0
+		}
+	}
+}
+
 func (g *Service) generateFunc(funcInfo common.FuncInfo, serviceName string) (result string) {
-	result = funcTemp
+	validateFuncName := serviceName + "_" + funcInfo.Name + "Validate"
+	if _, ok := validateFuncList[validateFuncName]; ok {
+		result = funcTempWithValidation
+	} else {
+		result = funcTemp
+	}
+
 	result = strings.ReplaceAll(result, "{name}", funcInfo.Name)
 	result = strings.ReplaceAll(result, "{param}", funcInfo.Params)
 	result = strings.ReplaceAll(result, "{service_name}", serviceName)
@@ -125,6 +157,10 @@ func (g *Service) generateImportList() (result string) {
 		result += "\n\t" + pkg
 	}
 
+	if len(validateFuncList) > 0 {
+		result += "\n\t\"" + g.getModName() + "/app/validation\""
+	}
+
 	result += "\n)"
 
 	return result
@@ -134,6 +170,7 @@ func (g *Service) parseContent(content []string) (result FileContent) {
 	result.FuncList = make([]common.FuncInfo, 0)
 	isImportContent := false
 	fileImportList := make(map[string]string)
+	funcParamsPkg := g.parseFuncParamsPkg(content)
 	for _, line := range content {
 		if strings.Contains(line, "type") && strings.Contains(line, "Service") {
 			result.ServiceName = strings.Split(line, " ")[1]
@@ -142,7 +179,10 @@ func (g *Service) parseContent(content []string) (result FileContent) {
 			isImportContent = false
 		}
 		if isImportContent {
-			oldProtoName, newProtoName := g.parsePkg(line)
+			oldProtoName, newProtoName, isNeed := g.parsePkg(line, funcParamsPkg)
+			if !isNeed {
+				continue
+			}
 			fileImportList[oldProtoName] = newProtoName
 			continue
 		}
@@ -155,6 +195,27 @@ func (g *Service) parseContent(content []string) (result FileContent) {
 		}
 		if strings.HasPrefix(line, "func ") {
 			result.FuncList = append(result.FuncList, g.parseFunc(line, fileImportList))
+		}
+	}
+
+	return result
+}
+
+func (g *Service) parseFuncParamsPkg(content []string) map[string]byte {
+	result := make(map[string]byte)
+	result["context"] = 0
+	for _, line := range content {
+
+		if !strings.HasPrefix(line, "func ") || strings.HasPrefix(line, "func New") {
+			continue
+		}
+
+		funcInfo := common.ParseFunc(line)
+		params := strings.Split(funcInfo.Params, ", ")
+		for _, param := range params {
+			paramType := strings.Split(param, " ")[1]
+			pkgName := strings.Trim(strings.Split(paramType, ".")[0], "*")
+			result[pkgName] = 0
 		}
 	}
 
@@ -199,23 +260,29 @@ func (g *Service) getPkgInfo(line string) (result PkgInfo) {
 	return result
 }
 
-func (g *Service) parsePkg(line string) (oldPkgName string, newPkgName string) {
+func (g *Service) parsePkg(line string, funcParams map[string]byte) (oldPkgName string, newPkgName string, isNeed bool) {
 	pkgInfo := g.getPkgInfo(line)
+
+	if pkgInfo.OldName != "context" {
+		if _, ok := funcParams[pkgInfo.OldName]; !ok {
+			return oldPkgName, newPkgName, false
+		}
+	}
 
 	if _, ok := pkgList[pkgInfo.DefaultName]; !ok {
 		pkgNameCount[pkgInfo.DefaultName] = 0
 		pkgList[pkgInfo.DefaultName] = pkgInfo
 
-		return pkgInfo.OldName, pkgInfo.Name
+		return pkgInfo.OldName, pkgInfo.Name, true
 	}
 	if pkgList[pkgInfo.DefaultName].Pkg == pkgInfo.Pkg {
-		return pkgInfo.OldName, pkgInfo.DefaultName
+		return pkgInfo.OldName, pkgInfo.DefaultName, true
 	}
 	pkgNameCount[pkgInfo.DefaultName]++
 	pkgInfo.Name = pkgInfo.DefaultName + strconv.Itoa(pkgNameCount[pkgInfo.DefaultName])
 	pkgList[pkgInfo.Name] = pkgInfo
 
-	return pkgInfo.OldName, pkgInfo.Name
+	return pkgInfo.OldName, pkgInfo.Name, true
 }
 
 func (g *Service) parseFunc(line string, fileImportList map[string]string) (result common.FuncInfo) {

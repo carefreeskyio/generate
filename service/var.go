@@ -20,3 +20,13 @@ var funcTemp = `func (s *Service) {name} (ctx context.Context, {param}) (err err
 }
 
 `
+
+var funcTempWithValidation = `func (s *Service) {name} (ctx context.Context, {param}) (err error) {
+	if err = validation.{service_name}_{name}Validate(request); err != nil {
+		return err
+	}
+
+	return s.{service_name}.{name}(ctx, {pass_through})
+}
+
+`

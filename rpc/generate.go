@@ -41,7 +41,7 @@ func (r *Rpc) GenRpc() {
 		if isImportContent && line == ")" {
 			isImportContent = false
 		}
-		if isImportContent {
+		if isImportContent && !strings.Contains(line, "service\"") && !strings.HasSuffix(line, "validation\"") {
 			importList[line] = 0
 			continue
 		}
