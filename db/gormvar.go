@@ -33,6 +33,10 @@ func (d *{name}Db) TableName() string {
 	return "{source_name}"
 }
 
+func (d *{name}Db) Query() *gorm.DB {
+	return d.DB.Table(d.TableName())
+}
+
 `
 
 var GormPKFieldTemp = "\t{name}{name_space} {type}{type_space} `gorm:\"primaryKey\" json:\"{source_name}\"`"
